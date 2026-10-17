@@ -4,18 +4,24 @@ A small FastAPI app built for the ASDD (Agile Software Development) mini project
 Students submit complaints; staff view, filter, and update their status.
 
 ## Features
+- Simple web page: students submit on one tab, staff manage on the other
 - Submit a complaint (title, category, description) - starts as `Open`
 - List complaints, filter by `status` and/or `category`
 - View one complaint by id
 - Update status: `Open -> In Progress -> Resolved` (anything else returns 400)
 
+## Who can do what
+- **Students** (no login): open `/` and submit complaints. They cannot see or change any complaint.
+- **Staff** (login required): open `/staff`. Default login is `staff` / `staff123`.
+  Change it with the environment variables `STAFF_USERNAME` and `STAFF_PASSWORD`.
+
 ## Endpoints
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | /complaints | Submit a complaint |
-| GET | /complaints?status=&category= | List / filter |
-| GET | /complaints/{id} | View one |
-| PATCH | /complaints/{id}/status | Update status |
+| POST | /complaints | Submit a complaint (students, no login) |
+| GET | /complaints?status=&category= | List / filter (staff login) |
+| GET | /complaints/{id} | View one (staff login) |
+| PATCH | /complaints/{id}/status | Update status (staff login) |
 
 Categories: hostel, academics, infrastructure, canteen, other
 
@@ -24,7 +30,7 @@ Categories: hostel, academics, infrastructure, canteen, other
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
-Open http://localhost:8000/docs
+Open http://localhost:8000 for the web app (or /docs for the API explorer)
 
 ## Run tests
 ```

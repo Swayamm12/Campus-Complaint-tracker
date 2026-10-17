@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Submit a Complaint - Campus Complaint Tracker</title>
+<style>
+  :root { --bg:#eef1f5; --ink:#17212b; --muted:#5d6b7a; --line:#d5dbe3; --accent:#0f6b6b; --err:#b3261e; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 "Segoe UI", system-ui, sans-serif; }
+  header { background:var(--ink); color:#fff; padding:28px 20px; }
+  .wrap { max-width:640px; margin:0 auto; }
+  h1 { margin:0 0 4px; font-size:1.7rem; }
+  header p { margin:0; color:#b9c4d0; }
+  main { padding:24px 20px 40px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:22px; }
+  label { display:block; font-weight:600; margin-bottom:6px; }
+  .hint { font-weight:400; color:var(--muted); font-size:.875rem; }
+  input, select, textarea { width:100%; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; }
+  textarea { min-height:120px; resize:vertical; }
+  .field { margin-bottom:16px; }
+  button { background:var(--accent); color:#fff; border:0; padding:11px 22px; font:inherit; font-weight:600; border-radius:8px; cursor:pointer; }
+  button:hover { background:#0b5757; }
+  :focus-visible { outline:3px solid #7fb8ff; outline-offset:2px; }
+  .staff { text-align:center; margin-top:18px; font-size:.875rem; }
+  .staff a { color:var(--muted); }
+  #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ink); color:#fff;
+    padding:12px 20px; border-radius:8px; max-width:90%; opacity:0; pointer-events:none; transition:opacity .2s; }
+  #toast.show { opacity:1; } #toast.bad { background:var(--err); }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>Campus Complaint Tracker</h1>
+  <p>Report a problem on campus. Our staff will look into it.</p>
+</div></header>
+<main class="wrap">
+  <div class="card">
+    <div class="field">
+      <label for="title">Title <span class="hint">(3 to 100 characters)</span></label>
+      <input id="title" maxlength="100" placeholder="e.g. Fan not working in room 204">
+    </div>
+    <div class="field">
+      <label for="category">Category</label>
+      <select id="category">
+        <option value="hostel">Hostel</option><option value="academics">Academics</option>
+        <option value="infrastructure">Infrastructure</option><option value="canteen">Canteen</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="description">What happened? <span class="hint">(at least 5 characters)</span></label>
+      <textarea id="description" maxlength="1000" placeholder="Describe the problem and where it is."></textarea>
+    </div>
+    <button id="submit">Submit complaint</button>
+  </div>
+  <p class="staff"><a href="/staff">Staff login</a></p>
+</main>
+<div id="toast" role="status"></div>
+<script>
+  const $ = id => document.getElementById(id);
+  function toast(msg, bad) {
+    const t = $("toast"); t.textContent = msg; t.className = "show" + (bad ? " bad" : "");
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.className = "", 4000);
+  }
+  function errorText(d) {
+    if (typeof d.detail === "string") return d.detail;
+    if (Array.isArray(d.detail)) return d.detail.map(e => e.loc[e.loc.length-1] + ": " + e.msg).join(". ");
+    return "Something went wrong.";
+  }
+  $("submit").onclick = async () => {
+    const res = await fetch("/complaints", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ title:$("title").value.trim(), category:$("category").value,
+        description:$("description").value.trim() }) });
+    const data = await res.json();
+    if (!res.ok) return toast(errorText(data), true);
+    $("title").value = ""; $("description").value = "";
+    toast("Thank you. Your complaint #" + data.id + " was submitted.");
+  };
+</script>
+</body>
+</html>

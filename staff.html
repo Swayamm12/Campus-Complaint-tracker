@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff - Campus Complaint Tracker</title>
+<style>
+  :root { --bg:#eef1f5; --ink:#17212b; --muted:#5d6b7a; --line:#d5dbe3; --accent:#0f6b6b;
+    --open:#b7791f; --prog:#2b59c3; --done:#2f7d4f; --err:#b3261e; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 "Segoe UI", system-ui, sans-serif; }
+  header { background:var(--ink); color:#fff; padding:24px 20px; }
+  header .wrap { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .wrap { max-width:760px; margin:0 auto; }
+  h1 { margin:0; font-size:1.6rem; } header p { margin:2px 0 0; color:#b9c4d0; }
+  main { padding:24px 20px 60px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:20px; }
+  label { display:block; font-weight:600; margin-bottom:6px; }
+  input, select { width:100%; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; }
+  .field { margin-bottom:16px; }
+  .primary { background:var(--accent); color:#fff; border:0; padding:11px 22px; font:inherit; font-weight:600; border-radius:8px; cursor:pointer; }
+  .ghost { background:transparent; color:#fff; border:1px solid #6b7886; padding:8px 14px; font:inherit; border-radius:8px; cursor:pointer; }
+  :focus-visible { outline:3px solid #7fb8ff; outline-offset:2px; }
+  #login { max-width:380px; margin:30px auto; }
+  #login h2 { margin:0 0 16px; }
+  .error { color:var(--err); margin:12px 0 0; min-height:1.4em; }
+  .filters { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .filters div { flex:1; min-width:150px; }
+  .count { color:var(--muted); margin:0 0 12px; }
+  .item { margin-bottom:14px; } .item h3 { margin:0 0 4px; font-size:1.1rem; }
+  .meta { color:var(--muted); font-size:.875rem; margin-bottom:10px; }
+  .chip { display:inline-block; background:#e4ecec; color:var(--accent); border-radius:99px; padding:1px 10px; font-size:.8rem; font-weight:600; margin-right:6px; }
+  .item p { margin:0 0 14px; }
+  .track { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .step { font-size:.85rem; padding:3px 12px; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
+  .now.s-open { background:var(--open); border-color:var(--open); color:#fff; font-weight:600; }
+  .now.s-prog { background:var(--prog); border-color:var(--prog); color:#fff; font-weight:600; }
+  .now.s-done { background:var(--done); border-color:var(--done); color:#fff; font-weight:600; }
+  .past { border-color:var(--done); color:var(--done); } .arrow { color:var(--line); }
+  .action { margin-left:auto; background:#fff; border:2px solid var(--ink); color:var(--ink); padding:6px 14px; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; }
+  .action:hover { background:var(--ink); color:#fff; }
+  .finished { margin-left:auto; color:var(--done); font-weight:600; }
+  .empty { text-align:center; color:var(--muted); padding:30px 10px; }
+  #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ink); color:#fff;
+    padding:12px 20px; border-radius:8px; max-width:90%; opacity:0; pointer-events:none; transition:opacity .2s; }
+  #toast.show { opacity:1; } #toast.bad { background:var(--err); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div><h1>Staff Dashboard</h1><p>View, filter and update complaints</p></div>
+  <button class="ghost" id="logout" hidden>Sign out</button>
+</div></header>
+<main class="wrap">
+  <section id="login" class="card">
+    <h2>Staff login</h2>
+    <div class="field"><label for="user">Username</label><input id="user" autocomplete="username"></div>
+    <div class="field"><label for="pass">Password</label><input id="pass" type="password" autocomplete="current-password"></div>
+    <button class="primary" id="signin">Sign in</button>
+    <p class="error" id="loginError"></p>
+  </section>
+
+  <section id="dash" hidden>
+    <div class="filters">
+      <div><label for="f-status">Status</label>
+        <select id="f-status"><option value="">All statuses</option><option>Open</option><option>In Progress</option><option>Resolved</option></select></div>
+      <div><label for="f-category">Category</label>
+        <select id="f-category"><option value="">All categories</option><option value="hostel">Hostel</option>
+          <option value="academics">Academics</option><option value="infrastructure">Infrastructure</option>
+          <option value="canteen">Canteen</option><option value="other">Other</option></select></div>
+    </div>
+    <p class="count" id="count"></p>
+    <div id="list"></div>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+<script>
+  const $ = id => document.getElementById(id);
+  const STEPS = ["Open", "In Progress", "Resolved"];
+  const CLS = { "Open":"s-open", "In Progress":"s-prog", "Resolved":"s-done" };
+  const NEXT = { "Open":["In Progress","Start work"], "In Progress":["Resolved","Mark resolved"] };
+  let auth = null;   // kept only in memory: refreshing the page signs you out
+
+  const authHeaders = () => ({ "Authorization": "Basic " + btoa(unescape(encodeURIComponent(auth))),
+                               "Content-Type": "application/json" });
+  function toast(msg, bad) {
+    const t = $("toast"); t.textContent = msg; t.className = "show" + (bad ? " bad" : "");
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.className = "", 3500);
+  }
+  function showLogin(msg) {
+    auth = null; $("login").hidden = false; $("dash").hidden = true; $("logout").hidden = true;
+    $("loginError").textContent = msg || ""; $("pass").value = "";
+  }
+  function errorText(d) {
+    if (typeof d.detail === "string") return d.detail;
+    if (Array.isArray(d.detail)) return d.detail.map(e => e.loc[e.loc.length-1] + ": " + e.msg).join(". ");
+    return "Something went wrong.";
+  }
+
+  async function signIn() {
+    auth = $("user").value.trim() + ":" + $("pass").value;
+    const res = await fetch("/complaints", { headers: authHeaders() });
+    if (res.status === 401) return showLogin("Wrong username or password.");
+    $("login").hidden = true; $("dash").hidden = false; $("logout").hidden = false;
+    render(await res.json());
+  }
+  $("signin").onclick = signIn;
+  $("pass").addEventListener("keydown", e => { if (e.key === "Enter") signIn(); });
+  $("logout").onclick = () => showLogin("You have signed out.");
+
+  async function load() {
+    const q = new URLSearchParams();
+    if ($("f-status").value) q.set("status", $("f-status").value);
+    if ($("f-category").value) q.set("category", $("f-category").value);
+    const res = await fetch("/complaints?" + q, { headers: authHeaders() });
+    if (res.status === 401) return showLogin("Please sign in again.");
+    render(await res.json());
+  }
+  $("f-status").onchange = load; $("f-category").onchange = load;
+
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text; return e; }
+
+  function render(items) {
+    $("count").textContent = items.length + (items.length === 1 ? " complaint" : " complaints");
+    const list = $("list"); list.innerHTML = "";
+    if (!items.length) { list.appendChild(el("div", "card empty", "No complaints match the filters.")); return; }
+    items.slice().reverse().forEach(c => list.appendChild(card(c)));
+  }
+
+  function card(c) {
+    const box = el("div", "card item");
+    box.appendChild(el("h3", "", "#" + c.id + "  " + c.title));
+    const meta = el("div", "meta"); meta.appendChild(el("span", "chip", c.category));
+    meta.appendChild(document.createTextNode(new Date(c.created_at).toLocaleString()));
+    box.appendChild(meta); box.appendChild(el("p", "", c.description));
+    const track = el("div", "track"), here = STEPS.indexOf(c.status);
+    STEPS.forEach((s, i) => {
+      if (i) track.appendChild(el("span", "arrow", "\u203A"));
+      track.appendChild(el("span", "step " + (i === here ? "now " + CLS[s] : i < here ? "past" : ""), s));
+    });
+    if (NEXT[c.status]) {
+      const [target, label] = NEXT[c.status];
+      const b = el("button", "action", label); b.onclick = () => change(c.id, target); track.appendChild(b);
+    } else track.appendChild(el("span", "finished", "Done"));
+    box.appendChild(track); return box;
+  }
+
+  async function change(id, status) {
+    const res = await fetch("/complaints/" + id + "/status", { method:"PATCH", headers: authHeaders(),
+      body: JSON.stringify({ status }) });
+    if (res.status === 401) return showLogin("Please sign in again.");
+    const data = await res.json();
+    if (!res.ok) return toast(errorText(data), true);
+    toast("Complaint #" + id + " is now " + status + "."); load();
+  }
+</script>
+</body>
+</html>
